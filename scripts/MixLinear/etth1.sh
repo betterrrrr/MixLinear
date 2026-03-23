@@ -1,6 +1,19 @@
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT" || exit 1
+
 if [ ! -d "./logs" ]; then
     mkdir ./logs
 fi
+
+if [ -x "./.venv/bin/python" ]; then
+  PYTHON_BIN="./.venv/bin/python"
+else
+  PYTHON_BIN="$(command -v python3)"
+fi
+
+# Prevent loading incompatible packages from ~/.local/lib/python*
+export PYTHONNOUSERSITE=1
 
 model_name=MixLinear
 #model_name=SparseTSF
@@ -20,7 +33,7 @@ do
 for pred_len in 96 192
 # 336 720
 do
-  ~/bin/python3 -u run_longExp.py \
+  "$PYTHON_BIN" -u run_longExp.py \
     --is_training 1 \
     --root_path $root_path_name \
     --data_path $data_path_name \
