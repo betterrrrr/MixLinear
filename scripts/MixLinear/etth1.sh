@@ -50,7 +50,7 @@ do
     --alpha $alpha \
     --lpf $lpf \
     --gpu 2 \
-    --itr 1 --batch_size 256 --learning_rate 0.03 > logs/${model_name}_${data_name}_${pred_len}_${lpf}_${alpha}.log  &
+    --itr 1 --batch_size 256 --learning_rate 0.03 > logs/${model_name}_${data_name}_${pred_len}_${lpf}_${alpha}_SWT.log  &
 done
 done
 done
