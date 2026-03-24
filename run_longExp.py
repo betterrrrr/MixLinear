@@ -33,6 +33,7 @@ parser.add_argument('--pred_len', type=int, default=96, help='prediction sequenc
 # MixLinear
 parser.add_argument('--alpha', type=float, default=0.5, help='MixLinear factor')
 parser.add_argument('--lpf', type=int, default=15, help='MixLinear factor')
+parser.add_argument('--swt_init', type=str, default='random', help='MixLinear SWT init type: random/haar/db2')
 
 # SparseTSF
 parser.add_argument('--period_len', type=int, default=24, help='period length')

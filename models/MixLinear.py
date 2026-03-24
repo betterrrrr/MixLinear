@@ -28,9 +28,14 @@ class Model(nn.Module):
         max_levels = max(1, int(math.log2(max(self.seq_len, 2))) - 1)
         self.swt_levels = min(3, max_levels)
 
-        # Two learnable analysis filters (shared over variables, depth-wise applied).
-        self.low_filter = nn.Parameter(torch.randn(self.swt_kernel_size) * 0.02)
-        self.high_filter = nn.Parameter(torch.randn(self.swt_kernel_size) * 0.02)
+        # Learnable weights for multi-scale detail aggregation.
+        self.detail_weights = nn.Parameter(torch.ones(self.swt_levels))
+
+        # Wavelet-based initialization option: random / haar / db2
+        self.swt_init = getattr(configs, 'swt_init', 'random').lower()
+        low_coef, high_coef = self._swt_init_filters(self.swt_kernel_size, self.swt_init)
+        self.low_filter = nn.Parameter(low_coef)
+        self.high_filter = nn.Parameter(high_coef)
 
         # Two prediction heads for trend/detail.
         self.trend_head = nn.Linear(self.seq_len, self.pred_len, bias=False)
@@ -39,6 +44,30 @@ class Model(nn.Module):
         # Learnable global fusion gate initialized from original alpha.
         alpha_init = min(max(float(self.alpha), 1e-4), 1.0 - 1e-4)
         self.mix_logit = nn.Parameter(torch.tensor(math.log(alpha_init / (1.0 - alpha_init)), dtype=torch.float32))
+
+    def _swt_init_filters(self, kernel_size, init_type='random'):
+        """Initialize SWT analysis filters using wavelet coefficients or random noise."""
+        init_type = init_type.lower()
+        if init_type == 'haar':
+            low = torch.tensor([1.0 / math.sqrt(2), 1.0 / math.sqrt(2)], dtype=torch.float32)
+            high = torch.tensor([1.0 / math.sqrt(2), -1.0 / math.sqrt(2)], dtype=torch.float32)
+        elif init_type in ('db2', 'daubechies'):
+            low = torch.tensor([0.4829629131445341, 0.8365163037378079, 0.2241438680420134, -0.1294095225512603], dtype=torch.float32)
+            high = torch.tensor([-0.1294095225512603, -0.2241438680420134, 0.8365163037378079, -0.4829629131445341], dtype=torch.float32)
+        else:
+            return torch.randn(kernel_size) * 0.02, torch.randn(kernel_size) * 0.02
+
+        if kernel_size == low.numel():
+            return low.clone(), high.clone()
+        elif kernel_size < low.numel():
+            return low[:kernel_size].clone(), high[:kernel_size].clone()
+
+        pad = kernel_size - low.numel()
+        left = pad // 2
+        right = pad - left
+        low_padded = F.pad(low, (left, right), mode='constant', value=0.0)
+        high_padded = F.pad(high, (left, right), mode='constant', value=0.0)
+        return low_padded, high_padded
 
     def _depthwise_same_conv(self, x, filt, dilation):
         """Depthwise 1D convolution with circular padding and same output length."""
@@ -65,8 +94,10 @@ class Model(nn.Module):
             details.append(high)
             current = low
 
-        # Mean aggregation keeps scale stable across different levels.
-        detail = torch.stack(details, dim=0).mean(dim=0)
+        # Weighted aggregation preserves multi-resolution information better than uniform averaging.
+        detail_stack = torch.stack(details, dim=-1)  # [B, C, S, L]
+        weights = F.softmax(self.detail_weights, dim=0).view(1, 1, 1, -1)
+        detail = (detail_stack * weights).sum(dim=-1)
         trend = current
         return trend, detail
 
