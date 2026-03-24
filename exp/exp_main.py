@@ -289,9 +289,10 @@ class Exp_Main(Exp_Basic):
         preds = []
         trues = []
         inputx = []
-        folder_path = './test_results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
+        # 不再输出 test_results 文件夹和 pdf
+        # folder_path = './test_results/' + setting + '/'
+        # if not os.path.exists(folder_path):
+        #     os.makedirs(folder_path)
 
         self.model.eval()
         with torch.no_grad():
@@ -338,11 +339,12 @@ class Exp_Main(Exp_Basic):
                 preds.append(pred)
                 trues.append(true)
                 inputx.append(batch_x.detach().cpu().numpy())
-                if i % 20 == 0:
-                    input = batch_x.detach().cpu().numpy()
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+                # 关闭可视化pdf输出
+                # if i % 20 == 0:
+                #     input = batch_x.detach().cpu().numpy()
+                #     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
+                #     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+                #     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         if self.args.test_flop:
             test_params_flop(self.model, (batch_x.shape[1],batch_x.shape[2]))
@@ -360,11 +362,7 @@ class Exp_Main(Exp_Basic):
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
         inputx = inputx.reshape(-1, inputx.shape[-2], inputx.shape[-1])
 
-        # result save
-        folder_path = './results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
+        # result save （不再生成 results 文件夹）
         mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
         print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
         f = open("result.txt", 'a')
@@ -426,11 +424,7 @@ class Exp_Main(Exp_Basic):
         preds = np.array(preds)
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
 
-        # result save
-        folder_path = './results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
-        np.save(folder_path + 'real_prediction.npy', preds)
+        # result save（不再生成 results 文件夹）
+        np.save('real_prediction.npy', preds)
 
         return

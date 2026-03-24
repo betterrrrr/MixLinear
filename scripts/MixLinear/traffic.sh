@@ -2,6 +2,18 @@ if [ ! -d "./logs" ]; then
     mkdir ./logs
 fi
 
+# Force using GPU 3 only
+GPU=3
+
+# validate availability
+GPU_COUNT=$(nvidia-smi --query-gpu=index --format=csv,noheader | wc -l)
+if [ "$GPU" -ge "$GPU_COUNT" ]; then
+    echo "ERROR: requested fixed GPU 3 is out of range (available $GPU_COUNT)."
+    exit 1
+fi
+
+echo "Using GPU $GPU"
+
 #model_name=SparseTSF
 model_name=MixLinear
 
@@ -37,7 +49,7 @@ do
     --patience 5 \
     --alpha $alpha \
     --lpf $lpf \
-    --gpu 6 \
+    --gpu $GPU \
     --itr 1 --batch_size 64  --learning_rate 0.03 > logs/${model_name}_${model_id_name}_${pred_len}_${lpf}_${alpha}.log &
 done
 done
