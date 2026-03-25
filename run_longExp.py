@@ -34,6 +34,8 @@ parser.add_argument('--pred_len', type=int, default=96, help='prediction sequenc
 parser.add_argument('--alpha', type=float, default=0.5, help='MixLinear factor')
 parser.add_argument('--lpf', type=int, default=15, help='MixLinear factor')
 parser.add_argument('--swt_init', type=str, default='random', help='MixLinear SWT init type: random/haar/db2')
+parser.add_argument('--swt_levels', type=int, default=2, help='MixLinear SWT decomposition levels')
+parser.add_argument('--segment_num', type=int, default=24, help='MixLinear segment count for trend branch')
 
 # SparseTSF
 parser.add_argument('--period_len', type=int, default=24, help='period length')
