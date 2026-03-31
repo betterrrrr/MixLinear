@@ -83,3 +83,30 @@ mse:0.404374361038208, mae:0.41562986373901367, rse:0.6038779020309448
 ETTh1_720_192_MixLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
 mse:0.39823588728904724, mae:0.4145948588848114, rse:0.5992769002914429
 
+
+在DLinear的基础上，加入固定的小波变换层，并补回均值平移（Mean-Centering），构建 MaxDLinear，结果如下：
+
+ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
+mse:0.37504175305366516, mae:0.39812883734703064, rse:0.5816980600357056
+
+ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
+mse:0.37511634826660156, mae:0.39825889468193054, rse:0.5817559957504272
+
+ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
+mse:0.4131448566913605, mae:0.42158007621765137, rse:0.6103915572166443
+
+ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
+mse:0.4203166663646698, mae:0.42875951528549194, rse:0.6156666874885559
+
+对比结论：
+
+1) 相比 DLinear（根据论文表中 ETTh1 的 RPD 反推，96/192 的 MSE 约为 0.4018/0.4312），MaxDLinear 在两个预测步长上都有提升。  
+- Horizon 96：0.3750 vs 0.4018（约提升 6.66%）  
+- Horizon 192：0.4131 vs 0.4312（约提升 4.19%）
+
+2) 相比当前最优 MixLinear 版本（96: 0.3655，192: 0.3982），MaxDLinear 仍有差距。  
+- Horizon 96：MaxDLinear 高 0.0095  
+- Horizon 192：MaxDLinear 高 0.0149
+
+说明固定 SWT + Mean-Centering 能稳定提升 DLinear 的频域分解能力，但若要进一步逼近 MixLinear，仍需要在趋势/细节分支表达能力上继续增强。
+
