@@ -86,6 +86,8 @@ mse:0.39823588728904724, mae:0.4145948588848114, rse:0.5992769002914429
 
 在DLinear的基础上，加入固定的小波变换层，并补回均值平移（Mean-Centering），构建 MaxDLinear，结果如下：
 
+使用db2小波初始化：
+
 ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
 mse:0.37504175305366516, mae:0.39812883734703064, rse:0.5816980600357056
 
@@ -109,4 +111,30 @@ mse:0.4203166663646698, mae:0.42875951528549194, rse:0.6156666874885559
 - Horizon 192：MaxDLinear 高 0.0149
 
 说明固定 SWT + Mean-Centering 能稳定提升 DLinear 的频域分解能力，但若要进一步逼近 MixLinear，仍需要在趋势/细节分支表达能力上继续增强。
+
+进一步使用 haar 小波做同配置对照实验（ETTh1, seq_len=720, alpha=0.95）：
+
+ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
+mse:0.3750530779361725, mae:0.3981536030769348, rse:0.5817068815231323
+
+ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
+mse:0.3750530779361725, mae:0.3981536030769348, rse:0.5817068815231323
+
+ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
+mse:0.4132770299911499, mae:0.42169100046157837, rse:0.6104891896247864
+
+ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
+mse:0.4132770299911499, mae:0.42169100046157837, rse:0.6104891896247864
+
+最终总结（MaxDLinear, 固定 SWT + Mean-Centering）：
+
+1) db2 与 haar 在本任务上都有效，但 db2 仍略优。  
+- Horizon 96：db2 最优 0.3750418，haar 0.3750531（db2 略优 0.0000113）  
+- Horizon 192：db2 最优 0.4131449，haar 0.4132770（db2 略优 0.0001322）
+
+2) 在当前 MaxDLinear 配置下，haar 的 lpf=1 与 lpf=5 结果几乎一致，说明该设置对 lpf 不敏感。
+
+3) 当前最优 MaxDLinear 配置为 db2 + lpf=5：  
+- Horizon 96：mse=0.3750418  
+- Horizon 192：mse=0.4131449
 
