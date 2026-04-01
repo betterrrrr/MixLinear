@@ -3,11 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-
 class Model(nn.Module):
     """MaxDLinear 主体。
 
-    思路与 DLinear 一致，但分解算子换为固定 SWT：
+    思路与 DLinear 一致，但分解算子换为可学习的 SWT：
     1) 先做序列分解，得到细节项与趋势项；
     2) 分别使用线性层做从历史窗口到预测窗口的映射；
     3) 两路结果相加得到最终预测。
@@ -20,7 +19,7 @@ class Model(nn.Module):
         self.pred_len = configs.pred_len
         self.enc_in = configs.enc_in
 
-        # 使用 lpf 控制 SWT 的固定滤波器长度（与现有脚本参数兼容）。
+        # 使用 lpf 控制 SWT 的滤波器长度（与现有脚本参数兼容）。
         self.lpf = getattr(configs, 'lpf', 15)
         self.swt_kernel_size = max(3, int(self.lpf))
         if self.swt_kernel_size % 2 == 0:
@@ -34,9 +33,17 @@ class Model(nn.Module):
         self.swt_init = getattr(configs, 'swt_init', 'haar').lower()
         low_coef, high_coef = self._swt_init_filters(self.swt_kernel_size, self.swt_init)
 
-        # 固定分解核，不参与训练。
-        self.register_buffer('low_filter', low_coef)
-        self.register_buffer('high_filter', high_coef)
+        # ---------------------------------------------------------
+        # [修改点 1] 将固定分解核改为可学习参数，使其在训练中自动调整
+        # 原代码: 
+        # self.register_buffer('low_filter', low_coef)
+        # self.register_buffer('high_filter', high_coef)
+        self.low_filter = nn.Parameter(low_coef)
+        self.high_filter = nn.Parameter(high_coef)
+        
+        # [修改点 2] 为不同层级的细节项(detail)引入可学习的融合权重
+        self.detail_weights = nn.Parameter(torch.ones(self.swt_levels) / self.swt_levels)
+        # ---------------------------------------------------------
 
         # individual 在当前实现里未启用，保留是为了兼容外部配置。
         self.individual = configs.individual
@@ -49,8 +56,6 @@ class Model(nn.Module):
 
         # 当前生效实现：直接在时间维做全长度线性映射。
         # 输入 [B, C, seq_len] -> 输出 [B, C, pred_len]
-        # self.Linear_Seasonal = nn.Linear(self.seg_num_x, self.seg_num_y, bias=False)
-        # self.Linear_Trend = nn.Linear(self.seg_num_x, self.seg_num_y, bias=False)
         self.Linear_Seasonal = nn.Linear(self.seq_len, self.pred_len)
         self.Linear_Trend = nn.Linear(self.seq_len, self.pred_len)
 
@@ -93,18 +98,12 @@ class Model(nn.Module):
         """使用 circular padding 的 depthwise 1D 卷积，保持时间长度不变。"""
         pad = ((self.swt_kernel_size - 1) * dilation) // 2
         x_pad = F.pad(x, (pad, pad), mode='circular')
+        # filt 现在是 nn.Parameter，通过 repeat 扩展到各通道，梯度会自动累加更新 filt
         weight = filt.view(1, 1, -1).repeat(self.enc_in, 1, 1)
         return F.conv1d(x_pad, weight, groups=self.enc_in, dilation=dilation)
 
     def _simple_swt(self, x):
-        """多层固定 SWT 分解。
-
-        参数:
-            x: [B, C, S]
-        返回:
-            trend: [B, C, S]
-            detail: [B, C, S]
-        """
+        """多层可学习 SWT 分解。"""
         current = x
         details = []
 
@@ -116,8 +115,13 @@ class Model(nn.Module):
             current = low
 
         detail_stack = torch.stack(details, dim=-1)  # [B, C, S, L]
-        # 简单 SWT: 各层细节做等权平均，不引入可学习参数。
-        detail = detail_stack.mean(dim=-1)
+        
+        # ---------------------------------------------------------
+        # [修改点 3] 应用可学习的权重来融合多层细节，而不是死板的等权平均
+        # 原代码: detail = detail_stack.mean(dim=-1)
+        detail = (detail_stack * self.detail_weights.view(1, 1, 1, -1)).sum(dim=-1)
+        # ---------------------------------------------------------
+        
         trend = current
         return trend, detail
 
@@ -126,22 +130,13 @@ class Model(nn.Module):
         # 仅对预测过程做零均值化，减轻绝对幅值与分布漂移对线性映射的影响。
         seq_mean = torch.mean(x, dim=1, keepdim=True)
 
-        # [B, L, C] -> [B, C, L]，分解算子使用固定 SWT。
+        # [B, L, C] -> [B, C, L]
         x = (x - seq_mean).permute(0, 2, 1)
         trend_init, seasonal_init = self._simple_swt(x)
 
         # 两个分支独立预测到 pred_len。
         seasonal_output = self.Linear_Seasonal(seasonal_init)
         trend_output = self.Linear_Trend(trend_init)
-
-        # 以下是历史分段线性版本的代码，当前保留注释以便后续实验切换。
-        # seasonal_init = seasonal_init.reshape(-1, self.seg_num_x, self.period_len).permute(0, 2, 1)
-        # seasonal_output = self.Linear_Seasonal(seasonal_init)  # bc,w,m
-        # seasonal_output = seasonal_output.permute(0, 2, 1).reshape(x.size(0), self.enc_in, self.pred_len)
-        #
-        # trend_init = trend_init.reshape(-1, self.seg_num_x, self.period_len).permute(0, 2, 1)
-        # trend_output = self.Linear_Trend(trend_init)  # bc,w,m
-        # trend_output = trend_output.permute(0, 2, 1).reshape(x.size(0), self.enc_in, self.pred_len)
 
         # 趋势项 + 季节项重构最终预测，并恢复为 [B, pred_len, C]。
         x = seasonal_output + trend_output
