@@ -94,6 +94,16 @@ class Model(nn.Module):
         high_padded = F.pad(high, (left, right), mode='constant', value=0.0)
         return low_padded, high_padded
 
+    def _normalize_swt_filter(self, filt, zero_mean=False, eps=1e-6):
+        """逐步归一化可学习小波滤波器，避免层间幅值漂移。
+
+        当 zero_mean=True（主要用于高频滤波器）时，先做零均值化，再归一化能量。
+        """
+        if zero_mean:
+            filt = filt - filt.mean()
+        norm = torch.norm(filt, p=2)
+        return filt / (norm + eps)
+
     def _depthwise_same_conv(self, x, filt, dilation):
         """使用 circular padding 的 depthwise 1D 卷积，保持时间长度不变。"""
         pad = ((self.swt_kernel_size - 1) * dilation) // 2
@@ -101,16 +111,18 @@ class Model(nn.Module):
         # filt 现在是 nn.Parameter，通过 repeat 扩展到各通道，梯度会自动累加更新 filt
         weight = filt.view(1, 1, -1).repeat(self.enc_in, 1, 1)
         return F.conv1d(x_pad, weight, groups=self.enc_in, dilation=dilation)
-
     def _simple_swt(self, x):
         """多层可学习 SWT 分解。"""
         current = x
         details = []
 
+        low_filt = self._normalize_swt_filter(self.low_filter, zero_mean=False)
+        high_filt = self._normalize_swt_filter(self.high_filter, zero_mean=True)
+
         for level in range(self.swt_levels):
             dilation = 2 ** level
-            low = self._depthwise_same_conv(current, self.low_filter, dilation)
-            high = self._depthwise_same_conv(current, self.high_filter, dilation)
+            low = self._depthwise_same_conv(current, low_filt, dilation)
+            high = self._depthwise_same_conv(current, high_filt, dilation)
             details.append(high)
             current = low
 
