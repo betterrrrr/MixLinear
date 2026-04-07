@@ -36,9 +36,10 @@ data_path_name=ETTh1.csv
 model_id_name=ETTh1
 data_name=ETTh1
 alpha=0.5
-seq_len=720
 lpf=1
 swt_init='db2'  # 可选值: random, haar, db2
+for seq_len in 96 360 720
+do
 for lpf in 1 5  
 do
 for alpha in  0.95
@@ -64,7 +65,8 @@ do
     --lpf $lpf \
     --swt_init $swt_init \
     --gpu $GPU \
-    --itr 1 --batch_size 256 --learning_rate 0.03 > logs/${model_name}_${data_name}_${pred_len}_${lpf}_${alpha}_${swt_init}_SWT.log  &
+    --itr 1 --batch_size 256 --learning_rate 0.03 > logs/${model_name}_${data_name}_${seq_len}_${pred_len}_${lpf}_${alpha}_${swt_init}_SWT.log  &
+done
 done
 done
 done
