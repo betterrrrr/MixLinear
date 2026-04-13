@@ -201,3 +201,108 @@ mse:0.40763580799102783, mae:0.4183453619480133, rse:0.6063082814216614
 ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
 mse:0.4092751443386078, mae:0.41913285851478577, rse:0.6075261831283569
 
+2026/4/13
+
+ETTh1_WaveMix_sl96_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.4178157448768616, mae:0.4266916811466217, rse:0.613974392414093
+
+ETTh1_WaveMix_sl96_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4702916741371155, mae:0.4570394456386566, rse:0.6512398719787598
+
+ETTh1_WaveMix_sl360_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.390815407037735, mae:0.41256964206695557, rse:0.5938047766685486
+
+ETTh1_WaveMix_sl360_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4365147054195404, mae:0.44174158573150635, rse:0.6274177432060242
+
+ETTh1_WaveMix_sl720_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl720_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.38537806272506714, mae:0.4145677983760834, rse:0.589659571647644
+
+ETTh1_WaveMix_sl720_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl720_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4306430220603943, mae:0.44367730617523193, rse:0.6231836080551147
+
+现在引入RevIN（可逆实例归一化
+ETTh1_WaveMix_sl96_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.39456942677497864, mae:0.4025680720806122, rse:0.5966498851776123
+
+ETTh1_WaveMix_sl96_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4466330409049988, mae:0.43186524510383606, rse:0.634647786617279
+
+ETTh1_WaveMix_sl360_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.3784480094909668, mae:0.40086275339126587, rse:0.5843337178230286
+
+ETTh1_WaveMix_sl360_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4192642271518707, mae:0.42618003487586975, rse:0.6148954033851624
+
+ETTh1_WaveMix_sl720_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl720_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.382368803024292, mae:0.4065142273902893, rse:0.5873528122901917
+
+ETTh1_WaveMix_sl720_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl720_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4398318827152252, mae:0.4431423842906952, rse:0.6297971606254578
+
+把当前的季节分支门控从单一权重替换成每个通道的独立 gate logit
+
+ETTh1_WaveMix_sl96_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.3968593180179596, mae:0.404437392950058, rse:0.5983787178993225
+
+ETTh1_WaveMix_sl96_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.44848090410232544, mae:0.433857798576355, rse:0.635959267616272
+
+ETTh1_WaveMix_sl360_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.3804718554019928, mae:0.40231814980506897, rse:0.5858941078186035
+
+ETTh1_WaveMix_sl360_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4139939248561859, mae:0.4225179851055145, rse:0.6110184192657471
+
+ETTh1_WaveMix_sl720_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl720_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.3833387494087219, mae:0.4079001545906067, rse:0.588097333908081
+
+ETTh1_WaveMix_sl720_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl720_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4212265610694885, mae:0.43106070160865784, rse:0.6163327097892761
+
+
+原来的实现里：
+q/k/v 是 [B, C, L]
+scores = q @ k^T 得到 [B, C, C]
+这会变成通道间注意力（变量互相混合），不是你要的时间维注意力。对于 LTSF 的通道独立建模，这通常会伤性能。
+已经修复为“通道独立的时间注意力”：
+scores 改为 [B, C, L, L]
+保留 top-k myopic 截断逻辑（沿时间维）
+输出仍回到 [B, C, L]
+
+ETTh1_WaveMix_sl96_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.3972269296646118, mae:0.4044531285762787, rse:0.5986557602882385
+
+ETTh1_WaveMix_sl96_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4491594433784485, mae:0.43412670493125916, rse:0.6364402174949646
+
+ETTh1_WaveMix_sl360_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.37994837760925293, mae:0.4022291600704193, rse:0.585490882396698
+
+ETTh1_WaveMix_sl360_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4172884225845337, mae:0.4252585768699646, rse:0.6134448647499084
+
+作用不大，改回来
+
+当前小波核确实通过 register_buffer 注册成不可训练的常量，下面改成可训练参数
+
+ETTh1_WaveMix_sl96_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.3966558575630188, mae:0.40412116050720215, rse:0.5982252955436707
+
+ETTh1_WaveMix_sl96_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl96_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.44842103123664856, mae:0.433748722076416, rse:0.6359168291091919
+
+ETTh1_WaveMix_sl360_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.3803589344024658, mae:0.4022282660007477, rse:0.5858071446418762
+
+ETTh1_WaveMix_sl360_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl360_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.4133833050727844, mae:0.42204639315605164, rse:0.6105676889419556
+
+ETTh1_WaveMix_sl720_pl96_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl720_pl96_WaveMix_0.5_15_0_seed2023  
+mse:0.38581666350364685, mae:0.4090636074542999, rse:0.5899950265884399
+
+ETTh1_WaveMix_sl720_pl192_haar_l2_k15_a3_WaveMix_ETTh1_ftM_sl720_pl192_WaveMix_0.5_15_0_seed2023  
+mse:0.42500320076942444, mae:0.4326712191104889, rse:0.6190894842147827
+
+用可训练的细节权重聚合 SWT 细节层
+

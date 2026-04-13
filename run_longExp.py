@@ -36,6 +36,9 @@ parser.add_argument('--lpf', type=int, default=15, help='MixLinear factor')
 parser.add_argument('--swt_init', type=str, default='random', help='MixLinear SWT init type: random/haar/db2')
 parser.add_argument('--swt_levels', type=int, default=2, help='MixLinear SWT decomposition levels')
 parser.add_argument('--segment_num', type=int, default=24, help='MixLinear segment count for trend branch')
+parser.add_argument('--freq_top_k', type=int, default=8, help='WaveMix Track-A retained low-frequency bins in FFT')
+parser.add_argument('--attn_top_k', type=int, default=3, help='WaveMix Track-B retained neighbors in myopic inverted attention')
+parser.add_argument('--recent_len', type=int, default=96, help='WaveMix Track-B recent window length for inverted embedding')
 
 # SparseTSF
 parser.add_argument('--period_len', type=int, default=24, help='period length')
