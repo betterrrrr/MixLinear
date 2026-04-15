@@ -27,7 +27,7 @@ fi
 
 echo "Using GPU $GPU"
 
-model_name=MaxDLinear
+model_name=MixDLinear
 
 root_path_name=./dataset/
 data_path_name=ETTh1.csv

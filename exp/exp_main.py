@@ -1,6 +1,6 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models import Informer, Autoformer,  DLinear, Linear, PatchTST, SparseTSF, MixLinear, FITS, MaxDLinear, WaveMix
+from models import Informer, Autoformer,  DLinear, Linear, PatchTST, SparseTSF, MixLinear, FITS, MixDLinear, WaveMix
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
 
@@ -29,7 +29,7 @@ class Exp_Main(Exp_Basic):
             'Autoformer': Autoformer,
             'Informer': Informer,
             'DLinear': DLinear,
-            'MaxDLinear': MaxDLinear,
+            'MixDLinear': MixDLinear,
             'FITS': DLinear,
             'Linear': Linear,
             'PatchTST': PatchTST,
@@ -235,14 +235,6 @@ class Exp_Main(Exp_Basic):
                         loss = loss_pred
 
                     train_loss.append(loss.item())
-
-                if (i + 1) % 100 == 0:
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
-                    speed = (time.time() - time_now) / iter_count
-                    left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
-                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
-                    iter_count = 0
-                    time_now = time.time()
 
                 if self.args.use_amp:
                     scaler.scale(loss).backward()

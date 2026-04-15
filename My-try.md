@@ -86,57 +86,57 @@ ETTh1_720_192_MixLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023
 mse:0.39823588728904724, mae:0.4145948588848114, rse:0.5992769002914429
 
 
-在DLinear的基础上，加入固定的小波变换层，并补回均值平移（Mean-Centering），构建 MaxDLinear，结果如下：
+在DLinear的基础上，加入固定的小波变换层，并补回均值平移（Mean-Centering），构建 MixDLinear，结果如下：
 
 使用db2小波初始化：
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
 mse:0.37504175305366516, mae:0.39812883734703064, rse:0.5816980600357056
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
 mse:0.37511634826660156, mae:0.39825889468193054, rse:0.5817559957504272
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
 mse:0.4131448566913605, mae:0.42158007621765137, rse:0.6103915572166443
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
 mse:0.4203166663646698, mae:0.42875951528549194, rse:0.6156666874885559
 
 对比结论：
 
-1) 相比 DLinear（根据论文表中 ETTh1 的 RPD 反推，96/192 的 MSE 约为 0.4018/0.4312），MaxDLinear 在两个预测步长上都有提升。  
+1) 相比 DLinear（根据论文表中 ETTh1 的 RPD 反推，96/192 的 MSE 约为 0.4018/0.4312），MixDLinear 在两个预测步长上都有提升。  
 - Horizon 96：0.3750 vs 0.4018（约提升 6.66%）  
 - Horizon 192：0.4131 vs 0.4312（约提升 4.19%）
 
-2) 相比当前最优 MixLinear 版本（96: 0.3655，192: 0.3982），MaxDLinear 仍有差距。  
-- Horizon 96：MaxDLinear 高 0.0095  
-- Horizon 192：MaxDLinear 高 0.0149
+2) 相比当前最优 MixLinear 版本（96: 0.3655，192: 0.3982），MixDLinear 仍有差距。  
+- Horizon 96：MixDLinear 高 0.0095  
+- Horizon 192：MixDLinear 高 0.0149
 
 说明固定 SWT + Mean-Centering 能稳定提升 DLinear 的频域分解能力，但若要进一步逼近 MixLinear，仍需要在趋势/细节分支表达能力上继续增强。
 
 进一步使用 haar 小波做同配置对照实验（ETTh1, seq_len=720, alpha=0.95）：
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
 mse:0.3750530779361725, mae:0.3981536030769348, rse:0.5817068815231323
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
 mse:0.3750530779361725, mae:0.3981536030769348, rse:0.5817068815231323
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
 mse:0.4132770299911499, mae:0.42169100046157837, rse:0.6104891896247864
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
 mse:0.4132770299911499, mae:0.42169100046157837, rse:0.6104891896247864
 
-最终总结（MaxDLinear, 固定 SWT + Mean-Centering）：
+最终总结（MixDLinear, 固定 SWT + Mean-Centering）：
 
 1) db2 与 haar 在本任务上都有效，但 db2 仍略优。  
 - Horizon 96：db2 最优 0.3750418，haar 0.3750531（db2 略优 0.0000113）  
 - Horizon 192：db2 最优 0.4131449，haar 0.4132770（db2 略优 0.0001322）
 
-2) 在当前 MaxDLinear 配置下，haar 的 lpf=1 与 lpf=5 结果几乎一致，说明该设置对 lpf 不敏感。
+2) 在当前 MixDLinear 配置下，haar 的 lpf=1 与 lpf=5 结果几乎一致，说明该设置对 lpf 不敏感。
 
-3) 当前最优 MaxDLinear 配置为 db2 + lpf=5：  
+3) 当前最优 MixDLinear 配置为 db2 + lpf=5：  
 - Horizon 96：mse=0.3750418  
 - Horizon 192：mse=0.4131449
 
@@ -148,57 +148,57 @@ nn.Parameter 替代 register_buffer：原先的滤波器系数在初始化后被
 
 使用haar小波初始化：
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
 mse:0.3708111345767975, mae:0.39747384190559387, rse:0.578407883644104
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
 mse:0.40119990706443787, mae:0.4185945689678192, rse:0.6015029549598694
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
 mse:0.3722027540206909, mae:0.3981342911720276, rse:0.5794922113418579
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
 mse:0.4040943384170532, mae:0.41907644271850586, rse:0.6036688089370728
 
 使用db2小波初始化：
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
 mse:0.3715880215167999, mae:0.3973120450973511, rse:0.5790135264396667
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
 mse:0.3675392270088196, mae:0.3965860903263092, rse:0.5758504271507263
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
 mse:0.408317893743515, mae:0.41850605607032776, rse:0.6068153381347656
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
 mse:0.40223976969718933, mae:0.4177444279193878, rse:0.602281928062439
 
 把circular padding 改成了 reflect padding，结果如下：
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
 mse:0.37036222219467163, mae:0.3975006639957428, rse:0.5780577063560486
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
 mse:0.37329861521720886, mae:0.40002453327178955, rse:0.5803446769714355
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
 mse:0.4063216745853424, mae:0.42018675804138184, rse:0.605330228805542
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
 mse:0.4086756110191345, mae:0.42019373178482056, rse:0.6070810556411743
 
 移除reflect padding 改为circular padding 把SWT 滤波器逐步归一化，高频滤波器的权重之和（均值）必须严格等于 0，以确保它只提取高频细节而不引入任何直流分量（DC Component）。低频滤波器则保持能量归一化即可。结果如下：
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_5_0_seed2023  
 mse:0.3711346387863159, mae:0.39579012989997864, rse:0.5786601901054382
 
-ETTh1_720_96_MaxDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
+ETTh1_720_96_MixDLinear_ETTh1_ftM_sl720_pl96_test_0.95_1_0_seed2023  
 mse:0.3701396584510803, mae:0.39569002389907837, rse:0.5778839588165283
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_1_0_seed2023  
 mse:0.40763580799102783, mae:0.4183453619480133, rse:0.6063082814216614
 
-ETTh1_720_192_MaxDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
+ETTh1_720_192_MixDLinear_ETTh1_ftM_sl720_pl192_test_0.95_5_0_seed2023  
 mse:0.4092751443386078, mae:0.41913285851478577, rse:0.6075261831283569
 
 2026/4/13

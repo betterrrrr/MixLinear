@@ -1,58 +1,117 @@
-import math
+# import torch
+# import torch.nn as nn
+# import torch.nn.functional as F
+# import numpy as np
+#
+# class moving_avg(nn.Module):
+#     """
+#     Moving average block to highlight the trend of time series
+#     """
+#     def __init__(self, kernel_size, stride):
+#         super(moving_avg, self).__init__()
+#         self.kernel_size = kernel_size
+#         self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=stride, padding=0)
+#
+#     def forward(self, x):
+#         # padding on the both ends of time series
+#         front = x[:, 0:1, :].repeat(1, (self.kernel_size - 1) // 2, 1)
+#         end = x[:, -1:, :].repeat(1, (self.kernel_size - 1) // 2, 1)
+#         x = torch.cat([front, x, end], dim=1)
+#         x = self.avg(x.permute(0, 2, 1))
+#         x = x.permute(0, 2, 1)
+#         return x
+#
+#
+# class series_decomp(nn.Module):
+#     """
+#     Series decomposition block
+#     """
+#     def __init__(self, kernel_size):
+#         super(series_decomp, self).__init__()
+#         self.moving_avg = moving_avg(kernel_size, stride=1)
+#
+#     def forward(self, x):
+#         moving_mean = self.moving_avg(x)
+#         res = x - moving_mean
+#         return res, moving_mean
+#
+# class Model(nn.Module):
+#     """
+#     Decomposition-Linear
+#     """
+#     def __init__(self, configs):
+#         super(Model, self).__init__()
+#         self.seq_len = configs.seq_len
+#         self.pred_len = configs.pred_len
+#
+#         # Decompsition Kernel Size
+#         kernel_size = 25
+#         self.decompsition = series_decomp(kernel_size)
+#         self.individual = configs.individual
+#         self.channels = configs.enc_in
+#
+#         if self.individual:
+#             self.Linear_Seasonal = nn.ModuleList()
+#             self.Linear_Trend = nn.ModuleList()
+#
+#             for i in range(self.channels):
+#                 self.Linear_Seasonal.append(nn.Linear(self.seq_len,self.pred_len))
+#                 self.Linear_Trend.append(nn.Linear(self.seq_len,self.pred_len))
+#
+#                 # Use this two lines if you want to visualize the weights
+#                 # self.Linear_Seasonal[i].weight = nn.Parameter((1/self.seq_len)*torch.ones([self.pred_len,self.seq_len]))
+#                 # self.Linear_Trend[i].weight = nn.Parameter((1/self.seq_len)*torch.ones([self.pred_len,self.seq_len]))
+#         else:
+#             self.Linear_Seasonal = nn.Linear(self.seq_len,self.pred_len)
+#             self.Linear_Trend = nn.Linear(self.seq_len,self.pred_len)
+#
+#             # Use this two lines if you want to visualize the weights
+#             # self.Linear_Seasonal.weight = nn.Parameter((1/self.seq_len)*torch.ones([self.pred_len,self.seq_len]))
+#             # self.Linear_Trend.weight = nn.Parameter((1/self.seq_len)*torch.ones([self.pred_len,self.seq_len]))
+#
+#     def forward(self, x):
+#         # x: [Batch, Input length, Channel]
+#         seasonal_init, trend_init = self.decompsition(x)
+#         seasonal_init, trend_init = seasonal_init.permute(0,2,1), trend_init.permute(0,2,1)
+#         if self.individual:
+#             seasonal_output = torch.zeros([seasonal_init.size(0),seasonal_init.size(1),self.pred_len],dtype=seasonal_init.dtype).to(seasonal_init.device)
+#             trend_output = torch.zeros([trend_init.size(0),trend_init.size(1),self.pred_len],dtype=trend_init.dtype).to(trend_init.device)
+#             for i in range(self.channels):
+#                 seasonal_output[:,i,:] = self.Linear_Seasonal[i](seasonal_init[:,i,:])
+#                 trend_output[:,i,:] = self.Linear_Trend[i](trend_init[:,i,:])
+#         else:
+#             seasonal_output = self.Linear_Seasonal(seasonal_init)
+#             trend_output = self.Linear_Trend(trend_init)
+#
+#         x = seasonal_output + trend_output
+#         return x.permute(0,2,1) # to [Batch, Output length, Channel]
+
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
+import math
 
-from layers.RevIN import RevIN
 
-
-class Model(nn.Module):
+class SWTDecomp(nn.Module):
     """
-    Decomposition-Linear with SWT decomposition.
+    SWT decomposition block used to replace moving-average smoothing.
     """
 
-    def __init__(self, configs):
-        super(Model, self).__init__()
-        self.seq_len = configs.seq_len
-        self.pred_len = configs.pred_len
-        self.individual = configs.individual
-        self.enc_in = configs.enc_in
-        self.use_revin = bool(getattr(configs, 'revin', 1))
-        self.affine = bool(getattr(configs, 'affine', 0))
-        self.subtract_last = bool(getattr(configs, 'subtract_last', 0))
-        if self.use_revin:
-            self.revin_layer = RevIN(self.enc_in, affine=self.affine, subtract_last=self.subtract_last)
+    def __init__(self, kernel_size, levels=2, init_type='haar', enc_in=1):
+        super(SWTDecomp, self).__init__()
+        self.kernel_size = max(3, int(kernel_size))
+        if self.kernel_size % 2 == 0:
+            self.kernel_size += 1
+        self.levels = max(1, int(levels))
+        self.enc_in = enc_in
 
-        # Reuse existing arguments for SWT settings.
-        self.lpf = getattr(configs, 'lpf', 15)
-        self.alpha = float(getattr(configs, 'alpha', 0.5))
-        self.swt_kernel_size = max(3, int(self.lpf))
-        if self.swt_kernel_size % 2 == 0:
-            self.swt_kernel_size += 1
-
-        # Track A: MixLinear-style frequency truncation count for trend branch.
-        self.freq_top_k = max(1, int(getattr(configs, 'freq_top_k', self.lpf)))
-
-        # Track B: inverted attention with myopic truncation on seasonal branch.
-        self.attn_top_k = max(1, int(getattr(configs, 'attn_top_k', max(1, self.enc_in // 2))))
-        self.attn_dropout = nn.Dropout(float(getattr(configs, 'dropout', 0.0)))
-        self.seasonal_q = nn.Linear(self.seq_len, self.seq_len, bias=False)
-        self.seasonal_k = nn.Linear(self.seq_len, self.seq_len, bias=False)
-        self.seasonal_v = nn.Linear(self.seq_len, self.seq_len, bias=False)
-        self.seasonal_gate_logit = nn.Parameter(torch.full((self.enc_in,), -2.2))
-
-        max_levels = max(1, int(math.log2(max(self.seq_len, 2))) - 1)
-        self.swt_levels = min(max_levels, max(1, int(getattr(configs, 'swt_levels', 2))))
-        self.swt_init = getattr(configs, 'swt_init', 'haar').lower()
-        self.detail_weights = nn.Parameter(torch.ones(self.swt_levels) / self.swt_levels)
-
-        low_coef, high_coef = self._swt_init_filters(self.swt_kernel_size, self.swt_init)
+        self.swt_init = init_type.lower()
+        low_coef, high_coef = self._swt_init_filters(self.kernel_size, self.swt_init)
         self.low_filter = nn.Parameter(low_coef)
         self.high_filter = nn.Parameter(high_coef)
-
-        self.Linear_Seasonal = nn.Linear(self.seq_len, self.pred_len)
-        self.Linear_Trend = nn.Linear(self.seq_len, self.pred_len)
+        self.detail_weights = nn.Parameter(torch.ones(self.levels))
 
     def _swt_init_filters(self, kernel_size, init_type='haar'):
         init_type = init_type.lower()
@@ -73,8 +132,8 @@ class Model(nn.Module):
                 -0.4829629131445341,
             ], dtype=torch.float32)
         else:
-            low = torch.tensor([1.0 / math.sqrt(2), 1.0 / math.sqrt(2)], dtype=torch.float32)
-            high = torch.tensor([1.0 / math.sqrt(2), -1.0 / math.sqrt(2)], dtype=torch.float32)
+            low = torch.randn(kernel_size) * 0.02
+            high = torch.randn(kernel_size) * 0.02
 
         if kernel_size == low.numel():
             return low.clone(), high.clone()
@@ -88,26 +147,27 @@ class Model(nn.Module):
         high_padded = F.pad(high, (left, right), mode='constant', value=0.0)
         return low_padded, high_padded
 
-    def _normalize_swt_filter(self, filt, zero_mean=False, eps=1e-6):
+    def _normalize_filter(self, filt, zero_mean=False, eps=1e-6):
         if zero_mean:
             filt = filt - filt.mean()
         norm = torch.norm(filt, p=2)
         return filt / (norm + eps)
 
     def _depthwise_same_conv(self, x, filt, dilation):
-        pad = ((self.swt_kernel_size - 1) * dilation) // 2
+        pad = ((self.kernel_size - 1) * dilation) // 2
         x_pad = F.pad(x, (pad, pad), mode='circular')
         weight = filt.view(1, 1, -1).repeat(self.enc_in, 1, 1)
         return F.conv1d(x_pad, weight, groups=self.enc_in, dilation=dilation)
 
-    def _swt_decompose(self, x):
-        current = x
+    def forward(self, x):
+        # x: [B, L, C] -> [B, C, L]
+        current = x.permute(0, 2, 1)
         details = []
 
-        low_filt = self._normalize_swt_filter(self.low_filter, zero_mean=False)
-        high_filt = self._normalize_swt_filter(self.high_filter, zero_mean=True)
+        low_filt = self._normalize_filter(self.low_filter, zero_mean=False)
+        high_filt = self._normalize_filter(self.high_filter, zero_mean=True)
 
-        for level in range(self.swt_levels):
+        for level in range(self.levels):
             dilation = 2 ** level
             low = self._depthwise_same_conv(current, low_filt, dilation)
             high = self._depthwise_same_conv(current, high_filt, dilation)
@@ -115,63 +175,58 @@ class Model(nn.Module):
             current = low
 
         detail_stack = torch.stack(details, dim=-1)
-        seasonal = (detail_stack * self.detail_weights.view(1, 1, 1, -1)).sum(dim=-1)
+        weights = F.softmax(self.detail_weights, dim=0).view(1, 1, 1, -1)
+        detail = (detail_stack * weights).sum(dim=-1)
         trend = current
-        return seasonal, trend
+        return detail.permute(0, 2, 1), trend.permute(0, 2, 1)
 
-    def _fft_lowpass_trend(self, trend):
-        """Track A: FFT low-pass truncation on trend features."""
-        spec = torch.fft.rfft(trend, dim=-1)
-        cutoff = min(self.freq_top_k, spec.size(-1))
-        low_spec = spec.clone()
-        low_spec[..., cutoff:] = 0
-        return torch.fft.irfft(low_spec, n=self.seq_len, dim=-1)
 
-    def _simpletm_myopic(self, seasonal):
-        """Track B: inverted attention with top-k myopic truncation."""
-        q = self.seasonal_q(seasonal)
-        k = self.seasonal_k(seasonal)
-        v = self.seasonal_v(seasonal)
+class Model(nn.Module):
+    """
+    Decomposition-Linear
+    """
 
-        scale = 1.0 / math.sqrt(max(1, self.seq_len))
-        scores = torch.matmul(q, k.transpose(-1, -2)) * scale
+    def __init__(self, configs):
+        super(Model, self).__init__()
+        self.seq_len = configs.seq_len
+        self.pred_len = configs.pred_len
 
-        top_k = min(self.attn_top_k, scores.size(-1))
-        if top_k < scores.size(-1):
-            topk_idx = torch.topk(scores, k=top_k, dim=-1).indices
-            masked_scores = torch.full_like(scores, float('-inf'))
-            masked_scores.scatter_(-1, topk_idx, scores.gather(-1, topk_idx))
-            scores = masked_scores
+        # Decomposition Kernel Size
+        kernel_size = getattr(configs, 'lpf', 25)
+        self.decompsition = SWTDecomp(
+            kernel_size=kernel_size,
+            levels=getattr(configs, 'swt_levels', 2),
+            init_type=getattr(configs, 'swt_init', 'db2'),
+            enc_in=configs.enc_in,
+        )
+        self.individual = configs.individual
+        self.enc_in = configs.enc_in
+        self.period_len = 24
 
-        attn = torch.softmax(scores, dim=-1)
-        attn = self.attn_dropout(attn)
-        return torch.matmul(attn, v)
+        self.seg_num_x = self.seq_len // self.period_len
+        self.seg_num_y = self.pred_len // self.period_len
 
-    def forward(self, x, x_mark=None, dec_inp=None, batch_y_mark=None, batch_y=None):
-        # Only the encoder input x is used for this decomposition-linear model.
-        # The extra arguments are accepted for compatibility with the common training loop.
+        # self.Linear_Seasonal = nn.Linear(self.seg_num_x, self.seg_num_y, bias=False)
+        # self.Linear_Trend = nn.Linear(self.seg_num_x, self.seg_num_y, bias=False)
+        self.Linear_Seasonal = nn.Linear(self.seq_len,self.pred_len)
+        self.Linear_Trend = nn.Linear(self.seq_len,self.pred_len)
+
+    def forward(self, x):
         # x: [Batch, Input length, Channel]
-        if self.use_revin:
-            x = self.revin_layer(x, 'norm')
+        seasonal_init, trend_init = self.decompsition(x)
+        seasonal_init, trend_init = seasonal_init.permute(0, 2, 1), trend_init.permute(0, 2, 1)
 
-        x = x.permute(0, 2, 1)
-        seasonal_init, trend_init = self._swt_decompose(x)
+        seasonal_output = self.Linear_Seasonal(seasonal_init)
+        trend_output = self.Linear_Trend(trend_init)
 
-        trend_track_a = self._fft_lowpass_trend(trend_init)
-        trend_feat = self.alpha * trend_track_a + (1.0 - self.alpha) * trend_init
-
-        seasonal_track_b = self._simpletm_myopic(seasonal_init)
-        seasonal_gate = torch.sigmoid(self.seasonal_gate_logit.view(1, -1, 1))
-        seasonal_feat = seasonal_gate * seasonal_track_b + (1.0 - seasonal_gate) * seasonal_init
-
-        seasonal_output = self.Linear_Seasonal(seasonal_feat)
-        trend_output = self.Linear_Trend(trend_feat)
+        # seasonal_init = seasonal_init.reshape(-1, self.seg_num_x, self.period_len).permute(0, 2, 1)
+        # seasonal_output = self.Linear_Seasonal(seasonal_init)  # bc,w,m
+        # seasonal_output = seasonal_output.permute(0, 2, 1).reshape(x.size(0), self.enc_in, self.pred_len)
+        #
+        # trend_init = trend_init.reshape(-1, self.seg_num_x, self.period_len).permute(0, 2, 1)
+        # trend_output = self.Linear_Trend(trend_init)  # bc,w,m
+        # trend_output = trend_output.permute(0, 2, 1).reshape(x.size(0), self.enc_in, self.pred_len)
 
         x = seasonal_output + trend_output
-        x = x.permute(0, 2, 1)
-
-        if self.use_revin:
-            x = self.revin_layer(x, 'denorm')
-
-        return x  # to [Batch, Output length, Channel]
+        return x.permute(0, 2, 1)  # to [Batch, Output length, Channel]
 

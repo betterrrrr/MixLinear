@@ -3,7 +3,7 @@ if [ ! -d "./logs" ]; then
 fi
 
 #model_name=SparseTSF
-model_name=MaxDLinear
+model_name=MixDLinear
 
 root_path_name=./dataset/
 data_path_name=ETTh2.csv

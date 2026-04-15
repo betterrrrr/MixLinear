@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import math
 
 class Model(nn.Module):
-    """MaxDLinear 主体。
+    """MixDLinear 主体。
 
     思路与 DLinear 一致，但分解算子换为可学习的 SWT：
     1) 先做序列分解，得到细节项与趋势项；
