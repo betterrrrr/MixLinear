@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT" || exit 1
+
+mkdir -p .locks
+LOCK_FILE="$PROJECT_ROOT/.locks/etth1_mixlinearv2.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "Another etth1 MixLinearV2 job is already running. lock=$LOCK_FILE"
+    exit 1
+fi
+
+if [ ! -d "./logs" ]; then
+    mkdir ./logs
+fi
+
+if [ -x "./.venv/bin/python" ]; then
+    PYTHON_BIN="./.venv/bin/python"
+else
+    PYTHON_BIN="$(command -v python3)"
+fi
+
+export PYTHONNOUSERSITE=1
+GPU=3
+
+GPU_COUNT=$(nvidia-smi --query-gpu=index --format=csv,noheader | wc -l || echo 1)
+
+echo "Using GPU $GPU for MixLinearV2 on ETTh1"
+
+model_name=MixLinearV2
+root_path_name=./dataset/
+data_path_name=ETTh1.csv
+model_id_name=ETTh1
+data_name=ETTh1
+
+for seq_len in 96 360 720; do
+    period_len=24
+    max_lpf=$((seq_len / period_len))
+    if [ "$max_lpf" -gt 15 ]; then
+        max_lpf=15
+    elif [ "$max_lpf" -le 0 ]; then
+        max_lpf=1
+    fi
+
+    for pred_len in 96 192; do
+        log_file="logs/${model_name}_${data_name}_${seq_len}_${pred_len}.log"
+        echo "---"
+        echo "Run: seq_len=$seq_len pred_len=$pred_len lpf=$max_lpf"
+        echo "log: $log_file"
+
+        CUDA_VISIBLE_DEVICES=$GPU "$PYTHON_BIN" -u run_longExp.py \
+            --is_training 1 \
+            --root_path "$root_path_name" \
+            --data_path "$data_path_name" \
+            --model_id "${model_id_name}_${seq_len}_${pred_len}" \
+            --model "$model_name" \
+            --data "$data_name" \
+            --features M \
+            --seq_len "$seq_len" \
+            --pred_len "$pred_len" \
+            --enc_in 7 \
+            --des "test" \
+            --itr 1 \
+            --batch_size 128 \
+            --learning_rate 0.01 \
+            --train_epochs 40 \
+            --patience 5 \
+            --lradj type3 \
+            --alpha 0.5 \
+            --period_len "$period_len" \
+            --lpf "$max_lpf" \
+            --gpu 0 \
+            > "$log_file" 2>&1
+    done
+done
