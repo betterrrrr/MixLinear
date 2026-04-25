@@ -15,10 +15,20 @@ class Exp_Basic(object):
 
     def _acquire_device(self):
         if self.args.use_gpu:
-            os.environ["CUDA_VISIBLE_DEVICES"] = str(
-                self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
-            device = torch.device('cuda:{}'.format(self.args.gpu))
-            print('Use GPU: cuda:{}'.format(self.args.gpu))
+            if self.args.use_multi_gpu:
+                os.environ["CUDA_VISIBLE_DEVICES"] = self.args.devices
+                device = torch.device('cuda:{}'.format(self.args.gpu))
+                print('Use multi GPU devices: {}, active cuda:{}'.format(self.args.devices, self.args.gpu))
+            else:
+                # Respect externally forced CUDA_VISIBLE_DEVICES (e.g. export CUDA_VISIBLE_DEVICES=3).
+                visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+                if not visible_devices:
+                    os.environ["CUDA_VISIBLE_DEVICES"] = str(self.args.gpu)
+                    visible_devices = os.environ["CUDA_VISIBLE_DEVICES"]
+
+                # Under single-GPU visibility, the valid logical index is cuda:0.
+                device = torch.device('cuda:0')
+                print('Use single GPU: cuda:0 (CUDA_VISIBLE_DEVICES={})'.format(visible_devices))
         else:
             device = torch.device('cpu')
             print('Use CPU')

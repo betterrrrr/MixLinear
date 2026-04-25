@@ -15,12 +15,12 @@ class Model(nn.Module):
         self.enc_in = configs.enc_in
         self.period_len = configs.period_len
 
-        self.kernel = self.period_len
-        self.lpf = configs.lpf
-        self.alpha = configs.alpha
-
         self.seg_num_x = math.ceil(self.seq_len / self.period_len)
         self.seg_num_y = math.ceil(self.pred_len / self.period_len)
+
+        self.kernel = self.period_len
+        self.lpf = min(configs.lpf, self.seg_num_x)
+        self.alpha = configs.alpha
 
         self.sqrt_seg_num_x = math.ceil(math.sqrt(self.seq_len / self.period_len))
         self.sqrt_seg_num_y = math.ceil(math.sqrt(self.pred_len / self.period_len))
@@ -35,6 +35,13 @@ class Model(nn.Module):
         # FLinear
         self.FLinear1 = nn.Linear(self.lpf, 2, bias=False).to(torch.cfloat)
         self.FLinear2 = nn.Linear(2, self.seg_num_y, bias=False).to(torch.cfloat)
+
+        # 可学习频点选择矩阵：将全部频点映射为 lpf 个“软选择”频点。
+        self.freq_select_temp = max(1e-6, float(getattr(configs, 'freq_select_temp', 1.0)))
+        selector_init = torch.full((self.seg_num_x, self.lpf), -2.0)
+        diag_len = min(self.seg_num_x, self.lpf)
+        selector_init[torch.arange(diag_len), torch.arange(diag_len)] = 2.0
+        self.freq_selector_logits = nn.Parameter(selector_init)
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -67,8 +74,11 @@ class Model(nn.Module):
 
         # Frequency Domain
 
-        x_fft = torch.fft.fft(x, dim=3)[:, :, :, :self.lpf]
-        # x_fft = x_fft.view(-1,self.lpf)
+        x_fft_full = torch.fft.fft(x, dim=3)
+        freq_bins = x_fft_full.size(-1)
+        selector_logits = self.freq_selector_logits[:freq_bins, :]
+        selector = torch.softmax(selector_logits / self.freq_select_temp, dim=0).to(x_fft_full.dtype)
+        x_fft = torch.einsum('becn,nk->beck', x_fft_full, selector)
         x_fft = self.FLinear1(x_fft)
         x_fft = self.FLinear2(x_fft).reshape(batch_size, self.enc_in, self.period_len, -1)
 

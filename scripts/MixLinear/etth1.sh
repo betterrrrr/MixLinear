@@ -15,6 +15,9 @@ fi
 # Prevent loading incompatible packages from ~/.local/lib/python*
 export PYTHONNOUSERSITE=1
 
+# Force training processes to only see physical GPU3.
+export CUDA_VISIBLE_DEVICES=3
+
 model_name=MixLinear
 #model_name=SparseTSF
 #MixLinear
@@ -24,9 +27,10 @@ data_path_name=ETTh1.csv
 model_id_name=ETTh1
 data_name=ETTh1
 alpha=0.5
-seq_len=720
 lpf=1
 swt_init='db2'  # 可选值: random, haar, db2
+for seq_len in 96 360 720
+do
 for lpf in 1 5  
 do
 for alpha in  0.95
@@ -38,7 +42,7 @@ do
     --is_training 1 \
     --root_path $root_path_name \
     --data_path $data_path_name \
-    --model_id $model_id_name'_'$seq_len'_'$pred_len \
+    --model_id ${model_id_name}_${seq_len}_${pred_len} \
     --model $model_name \
     --data $data_name \
     --features M \
@@ -51,8 +55,9 @@ do
     --alpha $alpha \
     --lpf $lpf \
     --swt_init $swt_init \
-    --gpu 2 \
-    --itr 1 --batch_size 256 --learning_rate 0.03 > logs/${model_name}_${data_name}_${pred_len}_${lpf}_${alpha}_${swt_init}_SWT.log  &
+    --gpu 0 \
+    --itr 1 --batch_size 256 --learning_rate 0.03 > logs/${model_name}_${data_name}_${seq_len}_${pred_len}_${lpf}_${alpha}_${swt_init}_SWT.log
+done
 done
 done
 done
