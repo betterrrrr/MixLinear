@@ -47,6 +47,7 @@ class Model(nn.Module):
 
         # individual 在当前实现里未启用，保留是为了兼容外部配置。
         self.individual = configs.individual
+        self.ablation_mode = getattr(configs, 'ablation_mode', 'original')
 
         # 每个周期长度，下面两个变量用于分段版本的预留实现。
         self.period_len = 24
@@ -150,8 +151,18 @@ class Model(nn.Module):
         seasonal_output = self.Linear_Seasonal(seasonal_init)
         trend_output = self.Linear_Trend(trend_init)
 
-        # 趋势项 + 季节项重构最终预测，并恢复为 [B, pred_len, C]。
-        x = seasonal_output + trend_output
+        # Ablation options:
+        # 1) trend_only: x = trend_output
+        # 2) detail_only: x = seasonal_output
+        # 3) original: x = seasonal_output + trend_output
+        if self.ablation_mode == 'trend_only':
+            x = trend_output
+        elif self.ablation_mode == 'detail_only':
+            x = seasonal_output
+        elif self.ablation_mode == 'original':
+            x = seasonal_output + trend_output
+        else:
+            raise ValueError(f"Unsupported ablation_mode: {self.ablation_mode}")
         x = x.permute(0, 2, 1)
 
         # 反归一化：将输入均值加回预测结果。
