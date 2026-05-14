@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT" || exit 1
+
+. "$SCRIPT_DIR/common.sh"
+setup_iTransformer_env
+
+model_name=iTransformer
+
+root_path_name=./dataset/
+data_path_name=ETTm1.csv
+model_id_name=ETTm1
+data_name=ETTm1
+enc_in=7
+
+for seq_len in 96 360 720
+do
+for pred_len in 96 192
+do
+  log_file="logs/${model_name}_${model_id_name}_${seq_len}_${pred_len}.log"
+  run_with_gpu_retry "$log_file" "$PYTHON_BIN" -u run_longExp.py \
+    --is_training 1 \
+    --root_path $root_path_name \
+    --data_path $data_path_name \
+    --model_id ${model_id_name}_${seq_len}_${pred_len} \
+    --model $model_name \
+    --data $data_name \
+    --features M \
+    --seq_len $seq_len \
+    --pred_len $pred_len \
+    --enc_in $enc_in \
+    --des 'Exp' \
+    --itr 1
+done
+done

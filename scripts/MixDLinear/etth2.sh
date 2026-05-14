@@ -19,9 +19,9 @@ export CUDA_VISIBLE_DEVICES=3
 
 model_name=MixDLinear
 root_path_name=./dataset/
-data_path_name=ETTm2.csv
-model_id_name=ETTm2
-data_name=ETTm2
+data_path_name=ETTh2.csv
+model_id_name=ETTh2
+data_name=ETTh2
 alpha=0.95
 lpf=5
 swt_init='db2'

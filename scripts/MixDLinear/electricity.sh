@@ -19,9 +19,9 @@ export CUDA_VISIBLE_DEVICES=3
 
 model_name=MixDLinear
 root_path_name=./dataset/
-data_path_name=ETTm2.csv
-model_id_name=ETTm2
-data_name=ETTm2
+data_path_name=electricity.csv
+model_id_name=Electricity
+data_name=custom
 alpha=0.95
 lpf=5
 swt_init='db2'
@@ -43,7 +43,7 @@ for seq_len in 96 360 720; do
             --seq_len $seq_len \
             --pred_len $pred_len \
             --period_len 24 \
-            --enc_in 7 \
+            --enc_in 321 \
             --train_epochs $train_epochs \
             --patience $patience \
             --alpha $alpha \
