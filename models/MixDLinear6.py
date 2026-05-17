@@ -4,95 +4,116 @@ import torch.nn.functional as F
 import math
 
 class Model(nn.Module):
-    """MixDLinear 增强版 (Learnable Everything)
+    """MixDLinear 主体。
 
-    在原有的 DLinear + SWT 架构基础上，将更多刚性物理操作转化为可学习参数：
-    1) 可学习的分解核 (原有)
-    2) 可学习的多尺度细节融合 (原有)
-    3) 可学习的每通道高频去噪阈值 (新增)
-    4) 可学习的趋势与细节重构比例 (新增)
-    5) 可学习的未来均值漂移补偿 (新增)
+    思路与 DLinear 一致，但分解算子换为可学习的 SWT：
+    1) 先做序列分解，得到细节项与趋势项；
+    2) 分别使用线性层做从历史窗口到预测窗口的映射；
+    3) 两路结果相加得到最终预测。
     """
 
     def __init__(self, configs):
         super(Model, self).__init__()
+        # 输入序列长度与预测长度。
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
         self.enc_in = configs.enc_in
 
+        # 使用 lpf 控制 SWT 的滤波器长度（与现有脚本参数兼容）。
         self.lpf = getattr(configs, 'lpf', 15)
         self.swt_kernel_size = max(3, int(self.lpf))
         if self.swt_kernel_size % 2 == 0:
             self.swt_kernel_size += 1
 
+        # SWT 分解层数，默认 2 层。
         max_levels = max(1, int(math.log2(max(self.seq_len, 2))) - 1)
         self.swt_levels = min(max_levels, max(1, int(getattr(configs, 'swt_levels', 2))))
 
+        # 小波类型：haar / db2。若未指定，默认使用更简单稳定的 haar。
         self.swt_init = getattr(configs, 'swt_init', 'haar').lower()
         low_coef, high_coef = self._swt_init_filters(self.swt_kernel_size, self.swt_init)
 
-        # [原有学习点 1] 分解核
+        # ---------------------------------------------------------
+        # [修改点 1] 将固定分解核改为可学习参数，使其在训练中自动调整
+        # 原代码: 
+        # self.register_buffer('low_filter', low_coef)
+        # self.register_buffer('high_filter', high_coef)
         self.low_filter = nn.Parameter(low_coef)
         self.high_filter = nn.Parameter(high_coef)
         
-        # [原有学习点 2] 多层细节的融合权重
-        self.detail_weights = nn.Parameter(torch.ones(self.swt_levels) / self.swt_levels)
-
-        # ---------------------------------------------------------
-        # [新增学习点 3] 可学习的高频软阈值去噪 (Learnable Soft Thresholding)
-        # 为每个通道(Channel)独立学习一个降噪门槛，初始值设为极小值(0.01)
-        self.shrinkage_threshold = nn.Parameter(torch.ones(1, self.enc_in, 1) * 0.01)
-        
-        # [新增学习点 4] 可学习的重构权重 (Learnable Recombination)
-        # 允许模型学习趋势和细节在最终预测结果中的占比 (初始比例为 1:1)
-        self.trend_weight = nn.Parameter(torch.ones(1, self.enc_in, 1))
-        self.season_weight = nn.Parameter(torch.ones(1, self.enc_in, 1))
-
-        # [新增学习点 5] 可学习的未来均值补偿 (Learnable Mean Shift Bias)
-        # 补偿简单均值归一化在长序列外推时带来的基线漂移误差
-        self.mean_shift_bias = nn.Parameter(torch.zeros(1, 1, self.enc_in))
+        # [修改点 2] 为不同层级的细节项预测输出引入可学习的融合权重
+        self.detail_out_weights = nn.Parameter(torch.zeros(self.swt_levels))
         # ---------------------------------------------------------
 
+        # individual 在当前实现里未启用，保留是为了兼容外部配置。
         self.individual = configs.individual
+        self.ablation_mode = getattr(configs, 'ablation_mode', 'original')
+
+        # 每个周期长度，下面两个变量用于分段版本的预留实现。
         self.period_len = 24
+
         self.seg_num_x = self.seq_len // self.period_len
         self.seg_num_y = self.pred_len // self.period_len
 
-        self.Linear_Seasonal = nn.Linear(self.seq_len, self.pred_len)
+        # 当前生效实现：直接在时间维做全长度线性映射。
+        # 输入 [B, C, seq_len] -> 输出 [B, C, pred_len]
+        self.Linear_Detail = nn.Linear(self.seq_len, self.pred_len)
         self.Linear_Trend = nn.Linear(self.seq_len, self.pred_len)
 
     def _swt_init_filters(self, kernel_size, init_type='haar'):
+        """初始化固定 SWT 分解滤波器。"""
         init_type = init_type.lower()
         if init_type == 'haar':
             low = torch.tensor([1.0 / math.sqrt(2), 1.0 / math.sqrt(2)], dtype=torch.float32)
             high = torch.tensor([1.0 / math.sqrt(2), -1.0 / math.sqrt(2)], dtype=torch.float32)
         elif init_type in ('db2', 'daubechies'):
-            low = torch.tensor([0.48296291, 0.83651630, 0.22414386, -0.12940952], dtype=torch.float32)
-            high = torch.tensor([-0.12940952, -0.22414386, 0.83651630, -0.48296291], dtype=torch.float32)
+            low = torch.tensor([
+                0.4829629131445341,
+                0.8365163037378079,
+                0.2241438680420134,
+                -0.1294095225512603,
+            ], dtype=torch.float32)
+            high = torch.tensor([
+                -0.1294095225512603,
+                -0.2241438680420134,
+                0.8365163037378079,
+                -0.4829629131445341,
+            ], dtype=torch.float32)
         else:
             low = torch.tensor([1.0 / math.sqrt(2), 1.0 / math.sqrt(2)], dtype=torch.float32)
             high = torch.tensor([1.0 / math.sqrt(2), -1.0 / math.sqrt(2)], dtype=torch.float32)
 
-        if kernel_size == low.numel(): return low.clone(), high.clone()
-        if kernel_size < low.numel(): return low[:kernel_size].clone(), high[:kernel_size].clone()
+        if kernel_size == low.numel():
+            return low.clone(), high.clone()
+        if kernel_size < low.numel():
+            return low[:kernel_size].clone(), high[:kernel_size].clone()
+
         pad = kernel_size - low.numel()
         left = pad // 2
         right = pad - left
-        return F.pad(low, (left, right), mode='constant', value=0.0), F.pad(high, (left, right), mode='constant', value=0.0)
+        low_padded = F.pad(low, (left, right), mode='constant', value=0.0)
+        high_padded = F.pad(high, (left, right), mode='constant', value=0.0)
+        return low_padded, high_padded
 
     def _normalize_swt_filter(self, filt, zero_mean=False, eps=1e-6):
+        """逐步归一化可学习小波滤波器，避免层间幅值漂移。
+
+        当 zero_mean=True（主要用于高频滤波器）时，先做零均值化，再归一化能量。
+        """
         if zero_mean:
             filt = filt - filt.mean()
         norm = torch.norm(filt, p=2)
         return filt / (norm + eps)
 
     def _depthwise_same_conv(self, x, filt, dilation):
+        """使用 circular padding 的 depthwise 1D 卷积，保持时间长度不变。"""
         pad = ((self.swt_kernel_size - 1) * dilation) // 2
         x_pad = F.pad(x, (pad, pad), mode='circular')
+        # filt 现在是 nn.Parameter，通过 repeat 扩展到各通道，梯度会自动累加更新 filt
         weight = filt.view(1, 1, -1).repeat(self.enc_in, 1, 1)
         return F.conv1d(x_pad, weight, groups=self.enc_in, dilation=dilation)
-
     def _simple_swt(self, x):
+        """多层可学习 SWT 分解。"""
         current = x
         details = []
 
@@ -106,38 +127,46 @@ class Model(nn.Module):
             details.append(high)
             current = low
 
-        detail_stack = torch.stack(details, dim=-1)  
-        detail = (detail_stack * self.detail_weights.view(1, 1, 1, -1)).sum(dim=-1)
-        
         # ---------------------------------------------------------
-        # [应用点 3] 软阈值去噪：剥离小于阈值的噪音，保留真实规律
-        thresh = torch.abs(self.shrinkage_threshold)
-        detail = torch.sign(detail) * F.relu(torch.abs(detail) - thresh)
+        # [修改点 3] 直接返回多尺度 details 列表，留作后续预测后再融合
         # ---------------------------------------------------------
         
         trend = current
-        return trend, detail
+        return trend, details
 
     def forward(self, x):
-        # 去均值
+        # x: [B, L, C]
+        # 仅对预测过程做零均值化，减轻绝对幅值与分布漂移对线性映射的影响。
         seq_mean = torch.mean(x, dim=1, keepdim=True)
-        x = (x - seq_mean).permute(0, 2, 1) # [B, C, L]
-        
-        # 分解
-        trend_init, seasonal_init = self._simple_swt(x)
 
-        # 线性映射
-        seasonal_output = self.Linear_Seasonal(seasonal_init) # [B, C, pred_len]
-        trend_output = self.Linear_Trend(trend_init)          # [B, C, pred_len]
+        # [B, L, C] -> [B, C, L]
+        x = (x - seq_mean).permute(0, 2, 1)
+        trend_init, details_init = self._simple_swt(x)
 
-        # ---------------------------------------------------------
-        # [应用点 4] 加权融合：打破 1:1 的死板相加
-        x = (seasonal_output * self.season_weight) + (trend_output * self.trend_weight)
-        # ---------------------------------------------------------
-        
-        x = x.permute(0, 2, 1) # [B, pred_len, C]
+        # 两个分支独立预测到 pred_len。
+        outs = []
+        for d in details_init:
+            outs.append(self.Linear_Detail(d))
+        detail_out_stack = torch.stack(outs, dim=-1)  # [B, C, pred_len, levels]
 
-        # ---------------------------------------------------------
-        # [应用点 5] 均值补偿：在加回历史均值的基础上，允许模型自我修正未来均值
-        return x + seq_mean + self.mean_shift_bias
-        # ---------------------------------------------------------
+        w = torch.softmax(self.detail_out_weights, dim=0)
+        seasonal_output = (detail_out_stack * w.view(1, 1, 1, -1)).sum(dim=-1)
+
+        trend_output = self.Linear_Trend(trend_init)
+
+        # Ablation options:
+        # 1) trend_only: x = trend_output
+        # 2) detail_only: x = seasonal_output
+        # 3) original: x = seasonal_output + trend_output
+        if self.ablation_mode == 'trend_only':
+            x = trend_output
+        elif self.ablation_mode == 'detail_only':
+            x = seasonal_output
+        elif self.ablation_mode == 'original':
+            x = seasonal_output + trend_output
+        else:
+            raise ValueError(f"Unsupported ablation_mode: {self.ablation_mode}")
+        x = x.permute(0, 2, 1)
+
+        # 反归一化：将输入均值加回预测结果。
+        return x + seq_mean
