@@ -1,6 +1,6 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models import Informer, Autoformer, DLinear, Linear, PatchTST, SparseTSF, MixLinear, FITS, MixDLinear, WaveMix, MixLinearPro, MixLinearV2, iTransformer
+from models import Informer, Autoformer, DLinear, Linear, PatchTST, SparseTSF, MixLinear, FITS, MixDLinear, WaveMix, MixLinearPro, MixLinearV2, iTransformer, AdaBandLinear
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
 
@@ -40,6 +40,7 @@ class Exp_Main(Exp_Basic):
             'FITS': FITS,
             'MixLinearV2': MixLinearV2,
             'iTransformer': iTransformer,
+            'AdaBandLinear': AdaBandLinear,
         }
 
         if self.args.is_transfering and "Electricity" in self.args.model_id:

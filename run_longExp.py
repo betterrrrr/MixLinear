@@ -39,6 +39,8 @@ parser.add_argument('--ablation_mode', type=str, default='original',
                     choices=['original', 'trend_only', 'detail_only'],
                     help='MixDLinear ablation mode')
 parser.add_argument('--segment_num', type=int, default=24, help='MixLinear segment count for trend branch')
+parser.add_argument('--num_bands', type=int, default=3, help='AdaBandLinear number of frequency bands')
+parser.add_argument('--band_rank', type=int, default=8, help='AdaBandLinear low-rank dimension for band heads')
 parser.add_argument('--freq_top_k', type=int, default=8, help='WaveMix Track-A retained low-frequency bins in FFT')
 parser.add_argument('--attn_top_k', type=int, default=3, help='WaveMix Track-B retained neighbors in myopic inverted attention')
 parser.add_argument('--recent_len', type=int, default=96, help='WaveMix Track-B recent window length for inverted embedding')
