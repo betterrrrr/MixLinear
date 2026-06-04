@@ -85,6 +85,8 @@ parser.add_argument('--do_predict', action='store_true', help='whether to predic
 # optimization
 parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
 parser.add_argument('--itr', type=int, default=2, help='experiments times')
+parser.add_argument('--iter_max', type=int, default=10, help='max iterations for iterative refinement')
+parser.add_argument('--iter_patience', type=int, default=3, help='early stopping patience for iterative refinement')
 parser.add_argument('--train_epochs', type=int, default=100, help='train epochs')
 parser.add_argument('--batch_size', type=int, default=128, help='batch size of train input data')
 parser.add_argument('--patience', type=int, default=100, help='early stopping patience')
@@ -122,10 +124,24 @@ print(args)
 Exp = Exp_Main
 
 if args.is_training:
-    for ii in range(args.itr):
-        random.seed(fix_seed_list[ii])
-        torch.manual_seed(fix_seed_list[ii])
-        np.random.seed(fix_seed_list[ii])
+    log_file = os.path.join('./logs', f'iterative_refinement_{args.model}_{args.data}_{args.seq_len}_{args.pred_len}.log')
+    with open(log_file, 'a') as f:
+        f.write(f'=== Iterative Refinement Log ===\n')
+        f.write(f'Model: {args.model}, Data: {args.data}, seq_len: {args.seq_len}, pred_len: {args.pred_len}\n')
+        f.write(f'Params: alpha={args.alpha}, lpf={args.lpf}, swt_init={args.swt_init}, swt_levels={args.swt_levels}\n')
+        f.write(f'iter_max={args.iter_max}, iter_patience={args.iter_patience}\n')
+        f.write(f'================================\n\n')
+
+    best_mse = float('inf')
+    best_setting = ''
+    best_iter = 0
+    no_improve_count = 0
+
+    for ii in range(args.iter_max):
+        seed_idx = ii % len(fix_seed_list)
+        random.seed(fix_seed_list[seed_idx])
+        torch.manual_seed(fix_seed_list[seed_idx])
+        np.random.seed(fix_seed_list[seed_idx])
         # setting record of experiments
         setting = '{}_{}_{}_ft{}_sl{}_pl{}_{}_{}_{}_{}_seed{}'.format(
             args.model_id,
@@ -138,20 +154,42 @@ if args.is_training:
             args.alpha,
             args.lpf,
             ii,
-            fix_seed_list[ii])
+            fix_seed_list[seed_idx])
 
         exp = Exp(args)  # set experiments
-        print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
+        print('>>>>>>>start training [{}/{}] : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(ii + 1, args.iter_max, setting))
         exp.train(setting)
 
-        print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting)
+        print('>>>>>>>testing [{}/{}] : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(ii + 1, args.iter_max, setting))
+        mse = exp.test(setting)
 
-        if args.do_predict:
-            print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.predict(setting, True)
+        with open(log_file, 'a') as f:
+            f.write(f'Iter {ii+1}: setting={setting}, MSE={mse:.7f}\n')
+
+        if mse < best_mse:
+            best_mse = mse
+            best_setting = setting
+            best_iter = ii + 1
+            no_improve_count = 0
+            print('*** New best MSE: {:.7f} (iter {}, setting: {})'.format(best_mse, ii + 1, setting))
+        else:
+            no_improve_count += 1
+            print('*** No improvement ({}/{}). Best MSE: {:.7f}'.format(no_improve_count, args.iter_patience, best_mse))
+
+        if no_improve_count >= args.iter_patience:
+            print('*** Early stopping: no improvement for {} consecutive iterations.'.format(args.iter_patience))
+            with open(log_file, 'a') as f:
+                f.write('Early stopped at iter {}: no improvement for {} consecutive iterations.\n'.format(ii + 1, args.iter_patience))
+            break
 
         torch.cuda.empty_cache()
+
+    with open(log_file, 'a') as f:
+        f.write('\n=== Best result ===\n')
+        f.write('Best iter: {}, Best MSE: {:.7f}, Setting: {}\n'.format(best_iter, best_mse, best_setting))
+        f.write('================================\n\n')
+
+    print('=== Final best MSE: {:.7f} (iter {}, setting: {}) ==='.format(best_mse, best_iter, best_setting))
 else:
 
 
