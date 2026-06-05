@@ -42,6 +42,7 @@ CUDA_VISIBLE_DEVICES=3 python -u run_longExp.py --is_training 1 --model MixLinea
 
 - `summarize.py` 解析 `result.txt`，按（数据集、模型、seq_len、pred_len）输出最佳 MSE/MAE 的 Markdown 表格。
 - `generate_scripts.py` 为指定模型跨标准数据集生成 shell 脚本。编辑模板和数据集列表后运行即可。
+- `iteration_log.md` 用于记录每次实验迭代的改动、结果和分析。必须保持更新以跟踪进展。
 
 ## 仓库注意事项
 
@@ -49,3 +50,8 @@ CUDA_VISIBLE_DEVICES=3 python -u run_longExp.py --is_training 1 --model MixLinea
 - 模型注册表在 `exp/exp_main.py` 中 — 添加新模型需要创建 `models/NewModel.py` 并在 `model_dict` 中注册。
 - `exp_basic.py:24-31` — GPU 设备逻辑：当外部已设置 `CUDA_VISIBLE_DEVICES`（例如通过 shell 脚本）时，强制使用 `cuda:0` 作为逻辑设备。
 - `FITS` 在注册表中映射到 `DLinear.Model`（不是自己的文件），这很可能是一个 bug/占位。
+
+## 日志要求
+
+- 每次修改模型或运行实验后，必须在 `iteration_log.md` 中记录改动、结果和关键发现。不要新增其他的日志，如result_v22.txt等。
+- 记录格式：包含版本号、架构变动、完整 6 配置结果表、加权 MSE、对比 baseline 的 win/loss 分析。

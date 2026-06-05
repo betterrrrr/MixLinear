@@ -24,13 +24,12 @@ train_epochs=40
 patience=10
 batch_size=128
 learning_rate=0.03
-num_bands=3
-band_rank=8
+swt_levels=3
 lpf=5
 
 for seq_len in 96 360 720; do
     for pred_len in 96 192; do
-        echo ">>> AdaBandLinear ETTh1 sl${seq_len}_pl${pred_len} num_bands=${num_bands} rank=${band_rank} <<<"
+        echo ">>> AdaBandLinear v22 ETTh1 sl${seq_len}_pl${pred_len} swt=${swt_levels} <<<"
         "$PYTHON_BIN" -u run_longExp.py \
             --is_training 1 \
             --root_path $root_path_name \
@@ -45,12 +44,13 @@ for seq_len in 96 360 720; do
             --enc_in 7 \
             --train_epochs $train_epochs \
             --patience $patience \
-            --num_bands $num_bands \
-            --band_rank $band_rank \
             --gpu 0 \
             --itr 1 \
+            --iter_max 1 \
             --batch_size $batch_size \
             --learning_rate $learning_rate \
-            --lpf $lpf > logs/${model_name}_${model_id_name}_${seq_len}_${pred_len}_nb${num_bands}_rk${band_rank}.log
+            --swt_levels $swt_levels \
+            --swt_init db2 \
+            --lpf $lpf > logs/${model_name}_${model_id_name}_${seq_len}_${pred_len}_swt${swt_levels}.log
     done
 done

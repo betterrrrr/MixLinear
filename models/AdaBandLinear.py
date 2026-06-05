@@ -11,33 +11,24 @@ class Model(nn.Module):
         self.pred_len = configs.pred_len
         self.enc_in = configs.enc_in
 
-        self.lpf = getattr(configs, 'lpf', 15)
+        self.lpf = getattr(configs, 'lpf', 5)
         self.kernel_size = max(3, int(self.lpf))
         if self.kernel_size % 2 == 0:
             self.kernel_size += 1
 
         max_levels = max(1, int(math.log2(max(self.seq_len, 2))) - 1)
-        self.swt_levels = min(max_levels, max(1, int(getattr(configs, 'swt_levels', 2))))
+        self.swt_levels = min(max_levels, max(1, int(getattr(configs, 'swt_levels', 3))))
         self.swt_init = getattr(configs, 'swt_init', 'db2').lower()
         low_coef, high_coef = self._init_filters(self.kernel_size, self.swt_init)
-
         self.low_filter = nn.Parameter(low_coef)
         self.high_filter = nn.Parameter(high_coef)
 
-        r = max(2, min(8, self.enc_in // 32))
-        self.use_ch_mix = 21 <= self.enc_in < 300
-        if self.use_ch_mix:
-            self.ch_down = nn.Linear(self.enc_in, r, bias=False)
-            self.ch_up = nn.Linear(r, self.enc_in, bias=False)
-
         n_paths = self.swt_levels + 1
-        self.heads = nn.ModuleList([
-            nn.Linear(self.seq_len, self.pred_len)
-            for _ in range(n_paths)
-        ])
 
+        self.level_heads = nn.ModuleList([
+            nn.Linear(self.seq_len, self.pred_len) for _ in range(n_paths)
+        ])
         self.level_weights = nn.Parameter(torch.ones(n_paths) / n_paths)
-        self.attn_alphas = nn.Parameter(torch.full((n_paths,), -3.0))
 
     def _init_filters(self, kernel_size, init_type):
         init_type = init_type.lower()
@@ -84,36 +75,20 @@ class Model(nn.Module):
         levels.append(current)
         return levels
 
-    def _channel_attend(self, x, alpha_param):
-        xc = x.permute(0, 2, 1).float()
-        x_n = F.normalize(xc, dim=-1)
-        cos = torch.bmm(x_n, x_n.transpose(1, 2))
-        sin = torch.sqrt(F.relu(1.0 - cos ** 2) + 1e-8)
-        cos = cos - cos.amax(dim=-1, keepdim=True).detach()
-        sin = sin - sin.amax(dim=-1, keepdim=True).detach()
-        alpha = torch.sigmoid(alpha_param)
-        score = (1 - alpha) * cos + alpha * sin
-        attn = F.softmax(score, dim=-1)
-        mixed = torch.bmm(attn, xc).permute(0, 2, 1).to(x.dtype)
-        return x + mixed
-
     def forward(self, x):
         B, L, C = x.shape
 
         seq_mean = x.mean(dim=1, keepdim=True)
-        x_norm = (x - seq_mean).permute(0, 2, 1)
+        x_norm = x - seq_mean
+        x_t = x_norm.permute(0, 2, 1)
 
-        if self.use_ch_mix:
-            ch = self.ch_up(self.ch_down(x_norm.permute(0, 2, 1))).permute(0, 2, 1)
-            x_norm = x_norm + ch
-
-        levels = self._decompose(x_norm)
+        levels = self._decompose(x_t)
 
         w = torch.softmax(self.level_weights, dim=0)
-        y = 0
-        for i, comp in enumerate(levels):
-            pred = self.heads[i](comp).permute(0, 2, 1)
-            pred = self._channel_attend(pred, self.attn_alphas[i])
+        y = torch.zeros(B, self.pred_len, C, device=x.device)
+
+        for i in range(len(levels)):
+            pred = self.level_heads[i](levels[i]).permute(0, 2, 1)
             y = y + w[i] * pred
 
         y = y + seq_mean

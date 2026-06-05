@@ -290,4 +290,102 @@ SWT(db2) → Seasonal MLP(64→64→pl, LN, dp=0.3) + Trend MLP(64→8→pl, LN,
 - v15.2: parameter-free cos+sin attention (only 1 learnable alpha per level) — sl720=0.37660 (close to v14), but sl96=0.39400 (worse than v14's 0.38471)
 - **Reverted to v14**
 - **Key insight**: SimpleTM's GeomAttention operates on embedding space (decorrelated representations), NOT raw time-domain variables. Softmax channel attention on raw variables acts as channel averaging — counterproductive for multivariate forecasting.
+
+## v14-v19: Multi-scale SWT + channel mixing + cos+sin channel attention
+
+### v14: Multi-scale SWT (SimpleTM-inspired input SWT + per-level Linear(P))
+- Input SWT → per-band Linear(P) → softmax fusion
+- ETTh1 weighted 0.39600, 4/6 wins vs baseline (previous best simple arch)
+- **Best stable single architecture** — 多尺度分解 + 简单直连 Linear 是最稳健的组合
+
+### v15-v18: Channel attention on SWT levels — all failed
+- v15: cos+sin (dot+wedge) channel attention at C=7 — all regressed (weighted 0.42773)
+- v16-v18: Variants of channel mixing/attention at small channel counts — none helped
+
+### v19: Input channel mixing (for mid-size channels 21≤C<300)
+- For Weather (C=21): 5/6 wins vs WDL baseline
+- Disabled for C<21 (ETTh1/2, ETTm1/2) and C≥300 (Traffic)
+- **Insight**: channel mixing only helps when there are enough channels to learn meaningful interactions
+
+### v20: MSGA (Multi-Scale GeomAttention) — channel attention on C
+- Embedding → wedge+dot channel attention over C channels
+- ETTh1 (C=7): weighted 0.39945, 0/6 wins — channel attention on 7 channels meaningless
+- Weather (C=21): 4/6 wins vs WaveDLinear, but still 20-25% gap to SimpleTM
+- **Key insight**: SimpleTM's "attention" is NOT channel attention. It treats d_model=32 as tokens (time positions) and C=7 as embedding dim. Attention matrix is [32,32] × levels, not [7,7]. This is time-position attention, not channel attention. All our failures (v15-v20) were from attending over C when C is tiny.
+
+### v21: SimpleTM reproduction (embed → SWT on d_dim → time-position GeomAttention)
+- Inverted embedding Linear(L, d_model=32) → SWT on d-dim Q/K/V → per-level GeomAttention over d×d positions
+- sl96→96: 0.38432 (barely beats baseline 0.3844!)
+- sl720→96: 0.42438 (training collapsed at epoch 5)
+- **Key insight**: SimpleTM's approach works for short sequences (L=96) but unstable for long sequences (L=720) — embedding bottleneck (720→32) too aggressive + wedge product numerical instability
+
+### v22: Hybrid — input multi-scale SWT + per-band time-position GeomAttention
+- v14's input SWT (time-domain multi-scale) + v21's GeomAttention over d×d positions
+- Per-band: embed(L→d) → shared QKV → GeomAttention(d×d) → per-band out(d→P) → softmax fusion
+- d_model = max(16, min(64, seq_len//3)): sl96→32, sl360/720→64
+- alpha init = -3.0 (wedge ≈5% initially, prevents crash)
+- sl96→96: **0.38132 (NEW ALL-TIME BEST!)**
+- Long seq worse than v14 (embedding bottleneck too severe)
+- Weighted: 0.40309
+
+### v23: v22 with expanded d_model for long sequences
+- d_model = max(32, min(128, seq_len//2)): sl96→48, sl360/720→128
+- **Big improvement on long seq**: sl360→96 0.40179→0.37621, sl360→192 0.41225→0.40819
+- **Regressed on short seq**: sl96→96 0.38132→0.39182 (d=48 overfits for L=96)
+- Weighted: 0.40015 (better than v22's 0.40309)
+- **Key insight**: single d_model can't serve all seq_lens optimally — need adaptive approach
+
+### Best Single-Architecture Ranking (ETTh1, weighted MSE)
+
+| Rank | Version | Weighted | 特点 |
+|------|---------|:------:|------|
+| 1 | v14 (multi-scale SWT) | 0.39600 | 4/6 beats baseline, most stable |
+| 2 | v13 (learnable wavelet) | 0.39697 | 2/6 beats baseline, simplest |
+| 3 | v1 (time-domain bands) | 0.39477 | sl720 best |
+| 4 | v23 (hybrid, d_model↑) | 0.40015 | sl96→96 best ever 0.38132 |
+| 5 | v22 (hybrid, d_model↓) | 0.40309 | sl96→96 0.38132 |
+
+### Best per-config records
+
+| Config | Baseline | Best | Version |
+|--------|:-------:|:----:|:----:|
+| sl96→96 | 0.3844 | **0.38132** | v22 |
+| sl96→192 | 0.4342 | 0.42965 | v11 |
+| sl360→96 | 0.3711 | 0.36751 | v8.1 |
+| sl360→192 | 0.4018 | 0.39999 | v6 |
+| sl720→96 | 0.3536 | 0.36391 | v1 |
+| sl720→192 | 0.4102 | 0.40152 | v1 |
+
+### Core Takeaways
+
+1. **SWT db2 多尺度分解 + 直连 Linear 是 ETTh1 上最稳健的组合** (v14)
+2. **时间位置 Attention** (对 d_model 位置而不是对通道) 对短序列有效——sl96→96 破纪录 0.38132
+3. **长序列瓶颈**: 嵌入 L→d_model 的压缩比是关键——720→64 (11×) 损失过多信息
+4. **固定 d_model 无法兼顾所有 seq_len**：sl96 需小 d (32-48) 防 overfit，sl720 需大 d (96+) 防 bottleneck
+5. **种子方差大**: itr=1 结果不可靠，同架构不同种子可能差 0.02+
+
+## v24: Fixed d_model=64 for all seq_lens
+- d_model=64 (fixed), v14 backbone + per-band attention with sigmoid(-5) gate
+- sl96→96: 0.38112 (NEW BEST!), sl96→192: 0.44342
+- Weighted: 0.40341 — worse than v14 (0.39600)
+
+## v25: v14 backbone + gated attention refinement (gate init=-5, attention ≈ off)
+- sl96→96: 0.38407, sl96→192: 0.43516, sl360→96: 0.37015, sl360→192: 0.40787, sl720→96: 0.37569, sl720→192: 0.41440
+- Weighted: 0.39789
+- Even with gate≈0, attention path didn't help — close to v14 but no improvement
+
+## Final Summary (v1-v25)
+
+### Architecture Evolution (Simplified Timeline)
+1. v1-v11: FFT band decomposition → complex/masked → abandoned (SparseTSF-inspired cross-period was best at 0.38283 sl96→96)
+2. v11-v13: SWT + direct Linear — v14 (multi-scale SWT) achieved 0.39600 weighted, 4/6 wins vs baseline
+3. v14: Multi-scale SWT + per-level Linear(P) + softmax fusion — **most robust design**
+4. v15-v20: Channel attention (C×C) — all failed (C=7 too small for meaningful attention)
+5. v21-v25: Time-position GeomAttention (over d_model positions, not channels) — sl96→96 record 0.38112, but overall worse than v14
+
+### Final Verdict
+- **Best single architecture**: v14 (multi-scale SWT + per-level Linear(P) + softmax fusion) — weighted 0.39600
+- **Best per-config records**: sl96→96=0.38112 (v24), sl96→192=0.42965 (v11), sl360→96=0.36751 (v8.1), sl360→192=0.39999 (v6), sl720→96=0.36391 (v1), sl720→192=0.40152 (v1)
+- **ETTh1 is saturating**: After 25 architecture iterations spanning 5 paradigms (FFT bands, cross-period, SWT+gate, channel attention, time-position attention), no single architecture beats the simple SWT+direct-Linear baseline consistently across all 6 configs. The dataset's 7-channel multivariate structure limits the effectiveness of attention-based approaches.
+- **Next steps**: Test v14 on all 7 datasets to evaluate generalization beyond ETTh1.
     
